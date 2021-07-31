@@ -73,13 +73,12 @@ def remove_row(A, b, i):
     return A, b
 
 
-def vaidya(A_0, b_0, x_0, y_0, eps, eta, K, oracle, newton_steps=10, stepsize=0.18, verbose=True):
+def vaidya(A_0, b_0, x_0, eps, eta, K, oracle, newton_steps=10, stepsize=0.18, verbose=True):
     """Use Vaidya's method to minimize f(x)."""
     A_k, b_k = A_0, b_0
     x_k = x_0
 
     xs = [x_0.copy()]
-    ys = [y_0.copy()]
     aux_evals = [0]
     for k in range(K):
         if verbose and k % 20 == 0:
@@ -90,8 +89,7 @@ def vaidya(A_0, b_0, x_0, y_0, eps, eta, K, oracle, newton_steps=10, stepsize=0.
         H_inv = get_H_inv(A_k, b_k, x_k)
         sigmas = get_sigmas(A_k, b_k, x_k, H_inv)
         if (sigmas >= eps).all():
-            c_k, y_0, aux_eval = oracle(x_k, y_0)
-            aux_evals.append(aux_evals[-1] + aux_eval)
+            c_k = oracle(x_k)
             beta_k = get_beta(A_k, -c_k, x_k, eps, eta, H_inv)
             A_k, b_k = add_row(A_k, b_k, -c_k, beta_k)
         else:
@@ -99,14 +97,13 @@ def vaidya(A_0, b_0, x_0, y_0, eps, eta, K, oracle, newton_steps=10, stepsize=0.
             A_k, b_k = remove_row(A_k, b_k, i)
 
         xs.append(x_k.copy())
-        ys.append(y_0.copy())
 
-    return xs, ys, aux_evals
+    return xs
 
 
-def get_init_polytope(d):
-    # Задать начальное множество A_0, b_0
+def get_init_polytope(d, R):
+    # Задать начальное множество A_0, b_0 для радиуса R
     A_0 = np.vstack((np.eye(d), -np.ones((1, d))))
-    b_0 = np.zeros(d + 1)
-    b_0[-1] = -1
+    b_0 = -R * np.ones(d + 1)
+    b_0[-1] *= d
     return A_0, b_0
