@@ -10,7 +10,7 @@ def prepare_data(dataset):
     data = load_svmlight_file(filename)
     A, y = data[0], data[1]
     m, n = A.shape
-    return A, y, m, n
+    return A, y, m, n + 1
 
 def change_format(A, y, m):
     X = np.hstack((A.todense().astype(np.float32), np.ones((m, 1))))

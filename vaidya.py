@@ -39,15 +39,13 @@ def get_dV(sigmas, A, b, x):
     dV = np.zeros((A.shape[1], 1))
     for i in range(A.shape[0]):
         a = A[i:i+1].T
-        dV -= sigmas[i] * a / (a.T @ x - b[i])**2
+        dV -= sigmas[i] * a / (a.T @ x - b[i])
     return dV
 
 
-def get_vol_center(A, b, x, n_steps=20, stepsize=0.10):
-    vals = np.zeros(n_steps)
+def get_vol_center(A, b, x, n_steps, stepsize):
     for step in range(n_steps):
         H_inv = get_H_inv(A, b, x)
-        vals[step] = 1 / np.linalg.det(H_inv)
         sigmas = get_sigmas(A, b, x, H_inv)
         Q_inv = get_Q_inv(sigmas, A, b, x)
         dV = get_dV(sigmas, A, b, x)
@@ -55,7 +53,7 @@ def get_vol_center(A, b, x, n_steps=20, stepsize=0.10):
     return x
 
 
-def get_beta(A, c, x, eps, eta, H_inv):
+def get_beta(c, x, eps, eta, H_inv):
     squared = 2 * c.T @ H_inv @ c / np.sqrt(eps * eta)
     beta = x.T @ c - np.sqrt(squared)
     return beta
@@ -73,24 +71,21 @@ def remove_row(A, b, i):
     return A, b
 
 
-def vaidya(A_0, b_0, x_0, eps, eta, K, oracle, newton_steps=10, stepsize=0.18, verbose=True):
+def vaidya(A_0, b_0, x_0, eps, eta, K, oracle, newton_steps=5, stepsize=0.18, verbose=True):
     """Use Vaidya's method to minimize f(x)."""
     A_k, b_k = A_0, b_0
     x_k = x_0
 
     xs = [x_0.copy()]
-    aux_evals = [0]
     for k in range(K):
         if verbose and k % 20 == 0:
             print(f"k={k}")
-        x_k = get_vol_center(A_k, b_k, x_k, n_steps=newton_steps, stepsize=stepsize)
-        if (x_k < 0).any():
-            break
+        x_k = get_vol_center(A_k, b_k, x_k, newton_steps, stepsize)
         H_inv = get_H_inv(A_k, b_k, x_k)
         sigmas = get_sigmas(A_k, b_k, x_k, H_inv)
         if (sigmas >= eps).all():
             c_k = oracle(x_k)
-            beta_k = get_beta(A_k, -c_k, x_k, eps, eta, H_inv)
+            beta_k = get_beta(-c_k, x_k, eps, eta, H_inv)
             A_k, b_k = add_row(A_k, b_k, -c_k, beta_k)
         else:
             i = sigmas.argmin()
