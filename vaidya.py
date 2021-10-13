@@ -59,8 +59,20 @@ def get_beta(c, x, eps, eta, H_inv):
     return beta
 
 
+def get_beta_t(c, x, eps, eta, H_inv):
+    squared = 2 * c @ H_inv @ c.T / np.sqrt(eps * eta)
+    beta = x.T @ c.T - np.sqrt(squared)
+    return beta
+
+
 def add_row(A, b, c, beta):
     A = np.vstack((A, c.T))
+    b = np.append(b, beta)
+    return A, b
+
+
+def add_row_t(A, b, c, beta):
+    A = np.vstack((A, c))
     b = np.append(b, beta)
     return A, b
 
@@ -96,9 +108,41 @@ def vaidya(A_0, b_0, x_0, eps, eta, K, oracle, newton_steps=5, stepsize=0.18, ve
     return xs
 
 
+def vaidya_for_logreg(A_0, b_0, x_0, eps, eta, K, oracle, model, x, y, criterion, newton_steps=5,
+                      stepsize=0.18, verbose=True):
+    """Use Vaidya's method to minimize f(x)."""
+    A_k, b_k = A_0, b_0
+    x_k = x_0
+
+    xs = [x_0.copy()]
+    for k in range(K):
+        if verbose and k % 20 == 0:
+            print(f"k={k}")
+        x_k = get_vol_center(A_k, b_k, x_k, newton_steps, stepsize)
+        H_inv = get_H_inv(A_k, b_k, x_k)
+        sigmas = get_sigmas(A_k, b_k, x_k, H_inv)
+        if (sigmas >= eps).all():
+            c_k = oracle(model, x, y, criterion, x_k.T)
+            beta_k = get_beta_t(-c_k, x_k, eps, eta, H_inv)
+            A_k, b_k = add_row_t(A_k, b_k, -c_k, beta_k)
+        else:
+            i = sigmas.argmin()
+            A_k, b_k = remove_row(A_k, b_k, i)
+
+        xs.append(x_k.copy())
+
+    return xs
+
+
 def get_init_polytope(d, R):
     # Задать начальное множество A_0, b_0 для радиуса R
     A_0 = np.vstack((np.eye(d), -np.ones((1, d))))
     b_0 = -R * np.ones(d + 1)
     b_0[-1] *= d
+    return A_0, b_0
+
+
+def get_init_polytope_square(d, R):
+    A_0 = np.vstack((np.eye(d), -np.eye(d)))
+    b_0 = -R * np.ones(2 * d)
     return A_0, b_0
