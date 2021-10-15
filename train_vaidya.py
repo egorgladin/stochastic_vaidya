@@ -28,23 +28,11 @@ def get_loss(model, x, y, criterion):
 
 def oracle(model, x, y, criterion, x_k):
     model.fc.weight = nn.Parameter(torch.from_numpy(x_k.astype(np.float32)), requires_grad=True)
-    get_loss(model, x, y, criterion)
-    return model.fc.weight.grad.detach().numpy()
-
-
-def train(model, x, y, criterion):
-    W_0 = model.fc.weight.detach().numpy()
-    new_weights = vaidya_for_logreg(A_0, b_0, W_0.T, eps, eta, K, oracle, model, x, y, criterion, stepsize=0.18, verbose=False)[-1]
-    model.fc.weight = torch.nn.Parameter(torch.from_numpy(new_weights.T.astype(np.float32)), requires_grad=True)
     loss = get_loss(model, x, y, criterion)
-
-    #print(loss)
-
-    new_output = model(x)
-    return loss, new_output
+    return model.fc.weight.grad.detach().numpy(), loss
 
 
-EPOCHS = 1
+EPOCHS = 3
 BATCH_SIZE = 25000
 DATA_PATH = "../Downloads/covtype.libsvm.binary.scale"
 
@@ -76,27 +64,21 @@ eps = 0.1
 eta = 100
 
 net = LogisticRegression(55, 1)
+loss_values = []
 
 for epoch in range(EPOCHS):
 
-    epoch_loss = 0
-
-    for bidx, batch in enumerate(data_train):
-
-        x_train, y_train = batch['inp'], batch['oup']
-        loss, predictions = train(net, x_train, y_train, criterion)
-        loss_values.append(float(loss))
-        epoch_loss += loss
-
-        logging.info('Step {} Loss : {}'.format((bidx + 1), loss))
-
-    logging.info('Epoch {} Loss : {}'.format((epoch + 1), epoch_loss))
+    W_0 = net.fc.weight.detach().numpy()
+    W, epoch_losses = vaidya_for_logreg(A_0, b_0, W_0.T, eps, eta, oracle, get_loss,
+                                        net, data_train, criterion, stepsize=0.18, verbose=False)
+    net.fc.weight = torch.nn.Parameter(torch.from_numpy(W.T.astype(np.float32)), requires_grad=True)
+    loss_values += epoch_losses
 
 plt.title('BCE Loss for Vaidya method')
 plt.xlabel('Steps')
 plt.ylabel('Loss')
 plt.plot(range(1, len(loss_values) + 1), loss_values, 'r')
-plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(1))
+plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(5))
 plt.grid(True, linestyle='-', color='0.75')
 plt.savefig('vaidya_loss.png')
 

@@ -1,4 +1,8 @@
+import logging
 import numpy as np
+
+
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 
 def get_H_inv(A, b, x):
@@ -108,30 +112,32 @@ def vaidya(A_0, b_0, x_0, eps, eta, K, oracle, newton_steps=5, stepsize=0.18, ve
     return xs
 
 
-def vaidya_for_logreg(A_0, b_0, x_0, eps, eta, K, oracle, model, x, y, criterion, newton_steps=5,
+def vaidya_for_logreg(A_0, b_0, x_0, eps, eta, oracle, get_loss, model, batches, criterion, newton_steps=5,
                       stepsize=0.18, verbose=True):
     """Use Vaidya's method to minimize f(x)."""
     A_k, b_k = A_0, b_0
     x_k = x_0
 
-    xs = [x_0.copy()]
-    for k in range(K):
-        if verbose and k % 20 == 0:
-            print(f"k={k}")
+    losses = []
+
+    for k, batch in enumerate(batches):
         x_k = get_vol_center(A_k, b_k, x_k, newton_steps, stepsize)
         H_inv = get_H_inv(A_k, b_k, x_k)
         sigmas = get_sigmas(A_k, b_k, x_k, H_inv)
         if (sigmas >= eps).all():
-            c_k = oracle(model, x, y, criterion, x_k.T)
+            c_k, loss = oracle(model, batch["inp"], batch["oup"], criterion, x_k.T)
             beta_k = get_beta_t(-c_k, x_k, eps, eta, H_inv)
             A_k, b_k = add_row_t(A_k, b_k, -c_k, beta_k)
         else:
+            loss = get_loss(model, batch["inp"], batch["oup"], criterion)
             i = sigmas.argmin()
             A_k, b_k = remove_row(A_k, b_k, i)
 
-        xs.append(x_k.copy())
+        losses.append(float(loss))
 
-    return xs
+        logging.info('Step {} Loss : {}'.format((k + 1), loss))
+
+    return x_k, losses
 
 
 def get_init_polytope(d, R):
