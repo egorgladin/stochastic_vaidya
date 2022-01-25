@@ -113,14 +113,15 @@ def vaidya(A_0, b_0, x_0, eps, eta, K, oracle, newton_steps=5, stepsize=0.18, ve
 
 
 def vaidya_for_logreg(A_0, b_0, x_0, eps, eta, oracle, get_loss, model, batches, criterion, newton_steps=5,
-                      stepsize=0.18, verbose=True):
+                      stepsize=0.18, maxiter=None):
     """Use Vaidya's method to minimize f(x)."""
     A_k, b_k = A_0, b_0
     x_k = x_0
 
-    losses = []
-
+    xs = [x_0.copy()]
     for k, batch in enumerate(batches):
+        if maxiter is not None and k == maxiter:
+            break
         x_k = get_vol_center(A_k, b_k, x_k, newton_steps, stepsize)
         H_inv = get_H_inv(A_k, b_k, x_k)
         sigmas = get_sigmas(A_k, b_k, x_k, H_inv)
@@ -133,11 +134,11 @@ def vaidya_for_logreg(A_0, b_0, x_0, eps, eta, oracle, get_loss, model, batches,
             i = sigmas.argmin()
             A_k, b_k = remove_row(A_k, b_k, i)
 
-        losses.append(float(loss))
+        xs.append(x_k.copy())
 
         logging.info('Step {} Loss : {}'.format((k + 1), loss))
 
-    return x_k, losses
+    return xs
 
 
 def get_init_polytope(d, R):

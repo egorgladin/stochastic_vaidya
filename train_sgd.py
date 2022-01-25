@@ -2,7 +2,10 @@ import json
 import logging
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import pickle
 
+import numpy as np
+import torch
 import torch.nn as nn
 from torch.optim import SGD
 from torch.utils.data import DataLoader
@@ -26,50 +29,66 @@ def train(model, x, y, criterion):
     return loss, output
 
 
-EPOCHS = 1
-BATCH_SIZE = 25000
-DATA_PATH = "../Downloads/covtype.libsvm.binary.scale"
+BATCH_SIZEs = [4]
+
+DATA_PATH = "../covtype.libsvm.binary.scale"
 
 A, y, m, n = prepare_data(DATA_PATH)
 X, y = change_format(A, y, m)
 
-net = LogisticRegression(55, 1)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 dataset = {"train": {"features": X_train, "labels": y_train},
            "test": {"features": X_test, "labels": y_test}}
 
 data_for_train = BinaryDataset(dataset)
-data_for_test = BinaryDataset(dataset, mode="test")
-data_train = DataLoader(dataset=data_for_train, batch_size=BATCH_SIZE, shuffle=False)
-data_test = DataLoader(dataset=data_for_test, batch_size=BATCH_SIZE, shuffle=False)
+
 criterion = nn.BCELoss()
-optimizer = SGD(net.parameters(), lr=0.1, momentum=0.9)
 
-loss_values = []
+maxiter = 3632
 
-for epoch in range(EPOCHS):
+all_losses = []
 
-    epoch_loss = 0
+for BATCH_SIZE in BATCH_SIZEs:
+    torch.manual_seed(0)
+    net = LogisticRegression(55, 1)
+    optimizer = SGD(net.parameters(), lr=0.01)
 
+    data_train = DataLoader(dataset=data_for_train, batch_size=BATCH_SIZE, shuffle=False)
+
+    weights = [net.fc.weight.detach().clone()]
     for bidx, batch in enumerate(data_train):
+        if bidx == maxiter:
+            break
 
         x_train, y_train = batch['inp'], batch['oup']
         loss, predictions = train(net, x_train, y_train, criterion)
-        loss_values.append(float(loss))
-        epoch_loss += loss
+        weights.append(net.fc.weight.detach().clone())
 
         logging.info('Step {} Loss : {}'.format((bidx + 1), loss))
 
-    logging.info('Epoch {} Loss : {}'.format((epoch + 1), epoch_loss))
+    losses = []
+    net.eval()
+    with torch.no_grad():
+        for W in weights:
+            net.fc.weight = torch.nn.Parameter(W)
 
-plt.title('BCE Loss for SGD')
-plt.xlabel('Steps')
+            pred = net(X_test).flatten()
+            cur_loss = criterion(pred, y_test).item()
+            losses.append(cur_loss)
+    with open(f'SGD_batch_{BATCH_SIZE}.pickle', 'wb') as handle:
+        pickle.dump(losses, handle)
+    all_losses.append(losses)
+
+
+plt.xlabel('Iteration')
 plt.ylabel('Loss')
-plt.plot(range(1, len(loss_values) + 1), loss_values, 'r')
-plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(1))
+for i, losses in enumerate(all_losses):
+    plt.plot(losses, label=f"batch size {BATCH_SIZEs[i]}")
+plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(500))
 plt.grid(True, linestyle='-', color='0.75')
-plt.savefig('sgd_loss.png')
+plt.legend()
+plt.xlim(left=0)
 
-with open("sgd_loss.json", 'w') as f:
-    json.dump(loss_values, f, indent=2)
+plt.savefig('SGD_loss.png')
+
